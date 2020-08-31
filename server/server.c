@@ -35,7 +35,7 @@
  * 
  * @Author: your name
  * @Date: 2020-08-28 17:19:07
- * @LastEditTime: 2020-08-31 16:58:10
+ * @LastEditTime: 2020-08-31 17:12:33
  * @LastEditors: Please set LastEditors
  * @Description: In User Settings Edit
  * @FilePath: /select/server/server.c
@@ -149,12 +149,12 @@ int main()
             maxfd = maxfd < tcp_socket ? tcp_socket : maxfd;
         }
 
-        for (int i = 0; i <= maxfd; i++)
+        for (int sock = 0; sock <= maxfd; sock++)
         {
-            if (FD_ISSET(i, &tm))
+            if (FD_ISSET(sock, &tm))
             {
                 memset(recvbuf, 0, sizeof(recvbuf));
-                int recv_len = (int)read(i, recvbuf, sizeof(recvbuf));
+                int recv_len = (int)read(sock, recvbuf, sizeof(recvbuf));
                 if (recv_len == -1)
                 {
                    perror("recv error");
@@ -164,10 +164,12 @@ int main()
                     struct sockaddr_in addr;
                     char ipbuf[16] = {0};
                     socklen_t sockaddr_len = sizeof(addr);
-                    getpeername(i, (struct sockaddr *)&addr, &sockaddr_len);
-                    printf("client log out. IP:%s\n",
-                           inet_ntop(AF_INET, &addr.sin_addr.s_addr, ipbuf, sizeof(ipbuf)));
-                    FD_CLR(i, &ndfs);                   
+                    getpeername(sock, (struct sockaddr *)&addr, &sockaddr_len);
+                    printf("client log out. IP:%s\tprot:%d\n",
+                           inet_ntop(AF_INET, &addr.sin_addr.s_addr, ipbuf, sizeof(ipbuf)),
+                           ntohs(addr.sin_port));
+                    FD_CLR(sock, &ndfs);
+                    close(sock);
                 }
                 else
                 {
@@ -175,7 +177,7 @@ int main()
                     char sendchar[] = "server receive: ";
                     char *sendbuf = strcat(sendchar, recvbuf);
                     printf("%s", sendbuf);
-                    send(i, sendbuf, strlen(sendbuf), 0);
+                    send(sock, sendbuf, strlen(sendbuf), 0);
                 }
             }
         }        
