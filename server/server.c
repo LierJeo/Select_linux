@@ -23,186 +23,229 @@
  * 
  *            佛祖保佑       永不宕机     永无BUG
  * 
- *        佛曰:  
- *                写字楼里写字间，写字间里程序员；  
- *                程序人员写程序，又拿程序换酒钱。  
- *                酒醒只在网上坐，酒醉还来网下眠；  
- *                酒醉酒醒日复日，网上网下年复年。  
- *                但愿老死电脑间，不愿鞠躬老板前；  
- *                奔驰宝马贵者趣，公交自行程序员。  
- *                别人笑我忒疯癫，我笑自己命太贱；  
- *                不见满街漂亮妹，哪个归得程序员？
- * 
  * @Author: your name
  * @Date: 2020-08-28 17:19:07
- * @LastEditTime: 2020-08-31 17:12:33
+ * @LastEditTime: 2020-09-01 14:30:08
  * @LastEditors: Please set LastEditors
  * @Description: In User Settings Edit
  * @FilePath: /select/server/server.c
  */
 
-
 #include <stdio.h>
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/select.h>
-#include <errno.h>
+#include <sys/uio.h>
 #include <netinet/in.h>
 #include <unistd.h>
 #include <arpa/inet.h>
 #include <stdlib.h>
 #include <string.h>
+#include "../common/common.h"
 
-//#define OPEN_MAX 1024
-#define LISTEN_PORT 9527
-#define MAX_SIZE 1024
-#define MAX_LINE 64
+#define T2 10
 
+int t2 = 10;
+
+typedef struct CLIENT
+{
+	int client_socket;
+	int aliva_count;
+	time_t alive_time;
+	struct sockaddr_in client_addr;
+} Client;
+
+void printf_so(Client client);
+void reset_client(Client *client);
 int memcpy_st(void *det, size_t detSize, const void *src, size_t srcSize, char *cppName, uint32_t lineNumber);
 
 int main()
 {
-    int tcp_listen_socket;
-    int udp_listen_socket;
-    struct sockaddr_in serv_addr;
-    struct sockaddr_in client_addr;
+	int tcp_listen_socket = 0;
+	int udp_listen_socket = 0;
 
-    extern int errno;
+	Client tcp_client;
+	//Client udp_client;
+	reset_client(&tcp_client);
 
-    fd_set ndfs;            //文件描述符最大值+1
-    fd_set tm;              //变化的套接字描述符
-    int sl_ret;             //select 返回值
+	struct Message message;
+	struct sockaddr_in serv_addr;
 
-    char recvbuf[MAX_SIZE] = {0};
+	fd_set ndfs;	//文件描述符最大值+1
+	fd_set tm;		//变化的套接字描述符
+	int sl_ret = 0; //select 返回值
 
-    //const char sendchar[] = "server receive:";
+	char recvbuf[MAX_SIZE] = {0};
+	struct iovec v;
+	v.iov_base = &recvbuf;
+	v.iov_len = sizeof(recvbuf);
 
-    //创建监听套接字
-    tcp_listen_socket = socket(AF_INET, SOCK_STREAM, 0);
-    udp_listen_socket = socket(AF_INET, SOCK_DGRAM, 0);
+	struct timeval tv;
+	tv.tv_sec = 0;
+	tv.tv_usec = 0;
 
-    if (tcp_listen_socket == -1 || udp_listen_socket == -1)
-    {
-        perror("listen socket create error");
-    }
+	//创建监听套接字
+	tcp_listen_socket = socket(AF_INET, SOCK_STREAM, 0);
+	udp_listen_socket = socket(AF_INET, SOCK_DGRAM, 0);
 
-    memset((void *)&serv_addr, 0, sizeof(serv_addr));
+	if (tcp_listen_socket == -1 || udp_listen_socket == -1)
+	{
+		perror("listen socket create error");
+	}
 
-    serv_addr.sin_family = AF_INET;
-    serv_addr.sin_addr.s_addr = htonl(INADDR_ANY);
-    serv_addr.sin_port = htons(LISTEN_PORT);
+	memset((void *)&serv_addr, 0, sizeof(serv_addr));
 
-    //int opt = 1;
-    //setsockopt(tcp_listen_socket, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
+	serv_addr.sin_family = AF_INET;
+	serv_addr.sin_addr.s_addr = htonl(INADDR_ANY);
+	serv_addr.sin_port = htons(LISTEN_PORT);
 
-    if(-1 == bind(tcp_listen_socket, (struct sockaddr *)&serv_addr, sizeof(serv_addr)))
-    {
-        perror("bind error");
-    }
-    if(-1 == bind(udp_listen_socket, (struct sockaddr *)&serv_addr, sizeof(serv_addr)))
-    {
-        perror("bind error");
-    }
-    
-    listen(tcp_listen_socket, MAX_LINE);
-    printf("start listen...\n");
-    char ipbuf[16] = {0};
-    printf("IP:%s \nlisten port:%d\n",
-           inet_ntop(AF_INET, &serv_addr.sin_addr.s_addr, ipbuf, sizeof(ipbuf)),
-           ntohs(serv_addr.sin_port));
+	if ((-1 == bind(tcp_listen_socket, (struct sockaddr *)&serv_addr, sizeof(serv_addr))) ||
+		(-1 == bind(udp_listen_socket, (struct sockaddr *)&serv_addr, sizeof(serv_addr))))
+	{
+		perror("bind error");
+	}
 
-    int maxfd = tcp_listen_socket > udp_listen_socket ? \
-                tcp_listen_socket : udp_listen_socket;
+	listen(tcp_listen_socket, MAX_LINE);
+	printf("start listen...\n");
+	char ipbuf[16] = {0};
+	printf("SERVER IP:%s \tlisten port:%d\n",
+		   inet_ntop(AF_INET, &serv_addr.sin_addr.s_addr, ipbuf, sizeof(ipbuf)),
+		   ntohs(serv_addr.sin_port));
 
-    
-    FD_ZERO(&ndfs);
-    FD_SET(tcp_listen_socket, &ndfs);
-    FD_SET(udp_listen_socket, &ndfs);
+	int maxfd = tcp_listen_socket > udp_listen_socket ? tcp_listen_socket : udp_listen_socket;
 
-    while (1)
-    {
-        tm = ndfs;
-        sl_ret = select(maxfd + 1, &tm, NULL, NULL, NULL);
-        if (sl_ret == -1)
-        {
-            perror("select error");
-            exit(1);
-        }
-        if (FD_ISSET(tcp_listen_socket, &tm))   
-        {
-            socklen_t clien_len = sizeof(client_addr);
-            int tcp_socket = accept(tcp_listen_socket, (struct sockaddr *)&client_addr, &clien_len);
-            if(tcp_socket == -1)
-            {
-                perror("accept error");
-                continue;
-            }
-            char ipbuf[16] = {0};
-            printf("new client link \n \
-                    IP: %s\n \
-                    port: %d\n",
-                   inet_ntop(AF_INET, &client_addr.sin_addr.s_addr, ipbuf, sizeof(ipbuf)),
-                   ntohs(client_addr.sin_port));
-            FD_SET(tcp_socket, &ndfs);
-            FD_CLR(tcp_listen_socket, &tm);
-            //重新设置最大描述符；
-            maxfd = maxfd < tcp_socket ? tcp_socket : maxfd;
-        }
+	FD_ZERO(&ndfs);
+	FD_SET(tcp_listen_socket, &ndfs);
+	FD_SET(udp_listen_socket, &ndfs);
 
-        for (int sock = 0; sock <= maxfd; sock++)
-        {
-            if (FD_ISSET(sock, &tm))
-            {
-                memset(recvbuf, 0, sizeof(recvbuf));
-                int recv_len = (int)read(sock, recvbuf, sizeof(recvbuf));
-                if (recv_len == -1)
-                {
-                   perror("recv error");
-                   continue;
-                }else if (recv_len == 0)
-                {
-                    struct sockaddr_in addr;
-                    char ipbuf[16] = {0};
-                    socklen_t sockaddr_len = sizeof(addr);
-                    getpeername(sock, (struct sockaddr *)&addr, &sockaddr_len);
-                    printf("client log out. IP:%s\tprot:%d\n",
-                           inet_ntop(AF_INET, &addr.sin_addr.s_addr, ipbuf, sizeof(ipbuf)),
-                           ntohs(addr.sin_port));
-                    FD_CLR(sock, &ndfs);
-                    close(sock);
-                }
-                else
-                {
-                    printf("read buf: %s", recvbuf);
-                    char sendchar[] = "server receive: ";
-                    char *sendbuf = strcat(sendchar, recvbuf);
-                    printf("%s", sendbuf);
-                    send(sock, sendbuf, strlen(sendbuf), 0);
-                }
-            }
-        }        
-    }
-    return 0;
+	while (true)
+	{
+		tm = ndfs;
+		time_t left_time = tv.tv_sec;
+		//计时归零时重置
+		if (tv.tv_sec == 0)
+		{
+			tv.tv_sec = ALIVE_TIME;
+		}
+		//计算周期t2剩余时间
+		t2 -= (ALIVE_TIME - left_time);
+		if (0 < t2 && t2 <= 3)
+		{
+			tv.tv_sec = t2;
+		}
+		if (t2 <= 0)
+		{
+			t2 = T2;
+			printf("T2 printf:\n");
+			if (tcp_client.client_socket != -1)
+			{
+				printf_so(tcp_client);
+			}
+			else
+			{
+				printf("no client.\n");
+			}
+		}
+
+		sl_ret = select(maxfd + 1, &tm, NULL, NULL, &tv);
+		if (sl_ret == -1)
+		{
+			perror("select error");
+			return -1;
+		}
+		if (FD_ISSET(tcp_listen_socket, &tm))
+		{
+			socklen_t clien_len = sizeof(tcp_client.client_addr);
+			tcp_client.client_socket = accept(tcp_listen_socket, (struct sockaddr *)&tcp_client.client_addr, &clien_len);
+			if (tcp_client.client_socket == -1)
+			{
+				perror("accept error");
+				continue;
+			}
+			printf_so(tcp_client);
+			FD_SET(tcp_client.client_socket, &ndfs);
+			//重新设置最大描述符；
+			maxfd = maxfd < tcp_client.client_socket ? tcp_client.client_socket : maxfd;
+		}
+		if (tcp_client.client_socket != -1)
+		{
+			if (FD_ISSET(tcp_client.client_socket, &tm))
+			{
+				tcp_client.alive_time = 0;
+				memset(recvbuf, 0, sizeof(recvbuf));
+				int recv_len = (int)readv(tcp_client.client_socket, &v, 1);
+				if (recv_len == -1)
+				{
+					perror("recv error");
+					continue;
+				}
+				else if (recv_len == 0)
+				{
+					printf("client disconnect:\n");
+					printf_so(tcp_client);
+					FD_CLR(tcp_client.client_socket, &ndfs);
+					close(tcp_client.client_socket);
+					reset_client(&tcp_client);
+				}
+				else
+				{
+					memcpy(&message, recvbuf, sizeof(message));
+					printf("count: %d \nclient name: %s\n", message.count, message.client_name);
+					tcp_client.aliva_count += 1;
+					// message.count += 1;
+					// v.iov_len = sizeof(message);
+					// v.iov_base = &message;
+					// writev(tcp_client.client_socket, &v, 1);
+				}
+			}
+			else
+			{
+				tcp_client.alive_time += ALIVE_TIME - left_time;
+				if (tcp_client.alive_time >= 3 * ALIVE_TIME)
+				{
+					close(tcp_client.client_socket);
+					FD_CLR(tcp_client.client_socket, &ndfs);
+					tcp_client.client_socket = -1;
+				}
+			}
+		}
+	}
+	return 0;
+}
+
+void printf_so(Client client)
+{
+	char ipbuf[16] = {0};
+	printf("client \n\tIP: %s\n\tport: %d \n\talive count:%d\n",
+		   inet_ntop(AF_INET, &client.client_addr.sin_addr.s_addr, ipbuf, sizeof(ipbuf)),
+		   ntohs(client.client_addr.sin_port),
+		   client.aliva_count);
+}
+
+void reset_client(Client *client)
+{
+	memset(client, 0, sizeof(Client));
+	client->client_socket = -1;
 }
 
 int memcpy_st(void *det, size_t detSize, const void *src, size_t srcSize, char *cppName, uint32_t lineNumber)
 {
-    uint8_t errorcode = 0;
-    if (srcSize > detSize || src == NULL || det == NULL)
-    {
-        if (srcSize > detSize)
-            errorcode = 1;
-        else if (src == NULL)
-            errorcode = 2;
-        else if (det == NULL)
-            errorcode = 3;
-        //printf("[waring] %s.%d memcpy_s is error:%d!\n", cppName, lineNumber, errorcode);
-        printf("[waring] %s.%d memcpy_s is error:%d [%ld---%ld]!\n", cppName, lineNumber, errorcode, srcSize, detSize);
-        fflush(stdout);
-        return -1;
-    }
-    else
-        memcpy(det, src, srcSize);
+	uint8_t errorcode = 0;
+	if (srcSize > detSize || src == NULL || det == NULL)
+	{
+		if (srcSize > detSize)
+			errorcode = 1;
+		else if (src == NULL)
+			errorcode = 2;
+		else if (det == NULL)
+			errorcode = 3;
+		//printf("[waring] %s.%d memcpy_s is error:%d!\n", cppName, lineNumber, errorcode);
+		printf("[waring] %s.%d memcpy_s is error:%d [%ld---%ld]!\n", cppName, lineNumber, errorcode, srcSize, detSize);
+		fflush(stdout);
+		return -1;
+	}
+	else
+		memcpy(det, src, srcSize);
 
-    return 1;
+	return 1;
 }

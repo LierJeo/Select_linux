@@ -1,7 +1,7 @@
 CXX = gcc
 CXXFLAGS = -Wall -Werror -Wextra -pedantic -g 
 
-SRC = server.c
+SRC = server.c 
 OBJ = $(SRC:.c=.o)
 EXEC = server
 
