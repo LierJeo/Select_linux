@@ -21,7 +21,7 @@ extern int errno;
 
 #define ALIVE_TIME 3
 
-struct Message
+struct Massage
 {
     int count;
     char client_name[50];

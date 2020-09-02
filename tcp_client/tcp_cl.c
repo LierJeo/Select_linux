@@ -1,7 +1,7 @@
 /*
  * @Author: your name
  * @Date: 2020-08-31 11:43:03
- * @LastEditTime: 2020-09-01 14:34:27
+ * @LastEditTime: 2020-09-02 13:57:32
  * @LastEditors: Please set LastEditors
  * @Description: In User Settings Edit
  * @FilePath: /select/tcp_client/tcp_cl.c
@@ -16,8 +16,7 @@
 #include <arpa/inet.h>
 #include "../common/common.h"
 #include <sys/uio.h>
-#define PORT 9527
-#define MAX_SIZE 1024
+//#define PORT 9527
 
 void process_client(int socket);
 struct iovec v;
@@ -35,7 +34,7 @@ int main()
 	memset(&server_addr, 0, sizeof(server_addr));
 	server_addr.sin_family = AF_INET;
 	server_addr.sin_addr.s_addr = htonl(INADDR_ANY);
-	server_addr.sin_port = htons(PORT);
+	server_addr.sin_port = htons(LISTEN_PORT);
 
 	//inet_pton(AF_INET, argv[1], &server_addr.sin_addr);
 
@@ -52,9 +51,9 @@ int main()
 void process_client(int socket)
 {
 	char name[] = "tcp client";
-	struct Message message;
+	struct Massage message;
 	message.count = 0;
-	memcpy(message.client_name, name, sizeof(name));
+	memcpy(message.client_name, name, sizeof(message.client_name) > sizeof(name) ? sizeof(name) : sizeof(message.client_name));
 	v.iov_base = &message;
 	v.iov_len = sizeof(message);
 	while (1)

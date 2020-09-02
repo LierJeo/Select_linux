@@ -9,6 +9,8 @@ export OBJSDIR = ${shell pwd}/bin/
 $(EXEC):$(OBJSDIR)
 	$(MAKE) -C server
 	$(MAKE) -C tcp_client
+	$(MAKE) -C udp_client
+
 $(OBJSDIR):
 	mkdir -p $(dir $@)
 clean:

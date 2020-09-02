@@ -25,7 +25,7 @@
  * 
  * @Author: your name
  * @Date: 2020-08-28 17:19:07
- * @LastEditTime: 2020-09-01 14:30:08
+ * @LastEditTime: 2020-09-02 14:43:50
  * @LastEditors: Please set LastEditors
  * @Description: In User Settings Edit
  * @FilePath: /select/server/server.c
@@ -42,6 +42,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "../common/common.h"
+#include <time.h>
 
 #define T2 10
 
@@ -57,18 +58,21 @@ typedef struct CLIENT
 
 void printf_so(Client client);
 void reset_client(Client *client);
+void printf_time();
 int memcpy_st(void *det, size_t detSize, const void *src, size_t srcSize, char *cppName, uint32_t lineNumber);
 
 int main()
 {
+
 	int tcp_listen_socket = 0;
 	int udp_listen_socket = 0;
 
 	Client tcp_client;
-	//Client udp_client;
+	Client udp_client;
 	reset_client(&tcp_client);
+	reset_client(&udp_client);
 
-	struct Message message;
+	struct Massage message;
 	struct sockaddr_in serv_addr;
 
 	fd_set ndfs;	//文件描述符最大值+1
@@ -90,6 +94,7 @@ int main()
 
 	if (tcp_listen_socket == -1 || udp_listen_socket == -1)
 	{
+		printf_time();
 		perror("listen socket create error");
 	}
 
@@ -102,13 +107,15 @@ int main()
 	if ((-1 == bind(tcp_listen_socket, (struct sockaddr *)&serv_addr, sizeof(serv_addr))) ||
 		(-1 == bind(udp_listen_socket, (struct sockaddr *)&serv_addr, sizeof(serv_addr))))
 	{
+		printf_time();
 		perror("bind error");
 	}
 
 	listen(tcp_listen_socket, MAX_LINE);
-	printf("start listen...\n");
+	printf_time();
+	printf("start listen...  ");
 	char ipbuf[16] = {0};
-	printf("SERVER IP:%s \tlisten port:%d\n",
+	printf("SERVER IP:%s   listen port:%d\n",
 		   inet_ntop(AF_INET, &serv_addr.sin_addr.s_addr, ipbuf, sizeof(ipbuf)),
 		   ntohs(serv_addr.sin_port));
 
@@ -133,16 +140,19 @@ int main()
 		{
 			tv.tv_sec = t2;
 		}
-		if (t2 <= 0)
+		else if (t2 <= 0)
 		{
+			//一个t2周期
 			t2 = T2;
-			printf("T2 printf:\n");
+			printf_time();
+			printf("T2 printf:\n\t");
 			if (tcp_client.client_socket != -1)
 			{
 				printf_so(tcp_client);
 			}
 			else
 			{
+				printf_time();
 				printf("no client.\n");
 			}
 		}
@@ -150,6 +160,7 @@ int main()
 		sl_ret = select(maxfd + 1, &tm, NULL, NULL, &tv);
 		if (sl_ret == -1)
 		{
+			printf_time();
 			perror("select error");
 			return -1;
 		}
@@ -159,6 +170,7 @@ int main()
 			tcp_client.client_socket = accept(tcp_listen_socket, (struct sockaddr *)&tcp_client.client_addr, &clien_len);
 			if (tcp_client.client_socket == -1)
 			{
+				printf_time();
 				perror("accept error");
 				continue;
 			}
@@ -176,12 +188,14 @@ int main()
 				int recv_len = (int)readv(tcp_client.client_socket, &v, 1);
 				if (recv_len == -1)
 				{
+					printf_time();
 					perror("recv error");
 					continue;
 				}
 				else if (recv_len == 0)
 				{
-					printf("client disconnect:\n");
+					printf_time();
+					printf("  client disconnect:  ");
 					printf_so(tcp_client);
 					FD_CLR(tcp_client.client_socket, &ndfs);
 					close(tcp_client.client_socket);
@@ -190,7 +204,9 @@ int main()
 				else
 				{
 					memcpy(&message, recvbuf, sizeof(message));
-					printf("count: %d \nclient name: %s\n", message.count, message.client_name);
+					printf_time();
+					printf_so(tcp_client);
+					printf("\tcount: %d client name: %s\n", message.count, message.client_name);
 					tcp_client.aliva_count += 1;
 					// message.count += 1;
 					// v.iov_len = sizeof(message);
@@ -209,6 +225,23 @@ int main()
 				}
 			}
 		}
+		if (FD_ISSET(udp_listen_socket, &tm))
+		{
+			memset(recvbuf, 0, sizeof(recvbuf));
+			socklen_t clien_len = sizeof(udp_client.client_addr);
+			int recv_len = recvfrom(udp_listen_socket, recvbuf, sizeof(recvbuf),
+									0, (struct sockaddr *)&(udp_client.client_addr), &clien_len);
+			if (recv_len == -1)
+			{
+				printf_time();
+				perror("recv error");
+				continue;
+			}
+			memcpy(&message, recvbuf, sizeof(message));
+			printf_time();
+			printf_so(udp_client);
+			printf("\tcount: %d  client name: %s\n\t", message.count, message.client_name);
+		}
 	}
 	return 0;
 }
@@ -216,10 +249,19 @@ int main()
 void printf_so(Client client)
 {
 	char ipbuf[16] = {0};
-	printf("client \n\tIP: %s\n\tport: %d \n\talive count:%d\n",
+	printf("client:  IP:%s  port:%d  alive count:%d\n",
 		   inet_ntop(AF_INET, &client.client_addr.sin_addr.s_addr, ipbuf, sizeof(ipbuf)),
 		   ntohs(client.client_addr.sin_port),
 		   client.aliva_count);
+}
+
+void printf_time()
+{
+	time_t t;
+	struct tm *timeinfo;
+	time(&t);
+	timeinfo = localtime(&t);
+	printf("[Time]%d:%d:%d: ", timeinfo->tm_hour, timeinfo->tm_min, timeinfo->tm_sec);
 }
 
 void reset_client(Client *client)
@@ -227,6 +269,7 @@ void reset_client(Client *client)
 	memset(client, 0, sizeof(Client));
 	client->client_socket = -1;
 }
+
 
 int memcpy_st(void *det, size_t detSize, const void *src, size_t srcSize, char *cppName, uint32_t lineNumber)
 {
