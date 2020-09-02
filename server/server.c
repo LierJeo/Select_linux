@@ -25,7 +25,7 @@
  * 
  * @Author: your name
  * @Date: 2020-08-28 17:19:07
- * @LastEditTime: 2020-09-02 14:43:50
+ * @LastEditTime: 2020-09-02 15:10:18
  * @LastEditors: Please set LastEditors
  * @Description: In User Settings Edit
  * @FilePath: /select/server/server.c
@@ -58,7 +58,7 @@ typedef struct CLIENT
 
 void printf_so(Client client);
 void reset_client(Client *client);
-void printf_time();
+void printf_time_func(const char *str);
 int memcpy_st(void *det, size_t detSize, const void *src, size_t srcSize, char *cppName, uint32_t lineNumber);
 
 int main()
@@ -87,14 +87,13 @@ int main()
 	struct timeval tv;
 	tv.tv_sec = 0;
 	tv.tv_usec = 0;
-
 	//创建监听套接字
 	tcp_listen_socket = socket(AF_INET, SOCK_STREAM, 0);
 	udp_listen_socket = socket(AF_INET, SOCK_DGRAM, 0);
 
 	if (tcp_listen_socket == -1 || udp_listen_socket == -1)
 	{
-		printf_time();
+		printf_time_func(__func__);
 		perror("listen socket create error");
 	}
 
@@ -107,12 +106,12 @@ int main()
 	if ((-1 == bind(tcp_listen_socket, (struct sockaddr *)&serv_addr, sizeof(serv_addr))) ||
 		(-1 == bind(udp_listen_socket, (struct sockaddr *)&serv_addr, sizeof(serv_addr))))
 	{
-		printf_time();
+		printf_time_func(__func__);
 		perror("bind error");
 	}
 
 	listen(tcp_listen_socket, MAX_LINE);
-	printf_time();
+	printf_time_func(__func__);
 	printf("start listen...  ");
 	char ipbuf[16] = {0};
 	printf("SERVER IP:%s   listen port:%d\n",
@@ -144,15 +143,15 @@ int main()
 		{
 			//一个t2周期
 			t2 = T2;
-			printf_time();
-			printf("T2 printf:\n\t");
+			printf_time_func(__func__);
+			printf("T2 printf:  ");
 			if (tcp_client.client_socket != -1)
 			{
 				printf_so(tcp_client);
 			}
 			else
 			{
-				printf_time();
+				printf_time_func(__func__);
 				printf("no client.\n");
 			}
 		}
@@ -160,7 +159,7 @@ int main()
 		sl_ret = select(maxfd + 1, &tm, NULL, NULL, &tv);
 		if (sl_ret == -1)
 		{
-			printf_time();
+			printf_time_func(__func__);
 			perror("select error");
 			return -1;
 		}
@@ -170,7 +169,7 @@ int main()
 			tcp_client.client_socket = accept(tcp_listen_socket, (struct sockaddr *)&tcp_client.client_addr, &clien_len);
 			if (tcp_client.client_socket == -1)
 			{
-				printf_time();
+				printf_time_func(__func__);
 				perror("accept error");
 				continue;
 			}
@@ -188,13 +187,13 @@ int main()
 				int recv_len = (int)readv(tcp_client.client_socket, &v, 1);
 				if (recv_len == -1)
 				{
-					printf_time();
+					printf_time_func(__func__);
 					perror("recv error");
 					continue;
 				}
 				else if (recv_len == 0)
 				{
-					printf_time();
+					printf_time_func(__func__);
 					printf("  client disconnect:  ");
 					printf_so(tcp_client);
 					FD_CLR(tcp_client.client_socket, &ndfs);
@@ -203,11 +202,11 @@ int main()
 				}
 				else
 				{
-					memcpy(&message, recvbuf, sizeof(message));
-					printf_time();
-					printf_so(tcp_client);
-					printf("\tcount: %d client name: %s\n", message.count, message.client_name);
 					tcp_client.aliva_count += 1;
+					memcpy(&message, recvbuf, sizeof(message));
+					printf_time_func(__func__);
+					printf_so(tcp_client);
+					printf("\tcount:%d client name:%s\n", message.count, message.client_name);
 					// message.count += 1;
 					// v.iov_len = sizeof(message);
 					// v.iov_base = &message;
@@ -233,12 +232,12 @@ int main()
 									0, (struct sockaddr *)&(udp_client.client_addr), &clien_len);
 			if (recv_len == -1)
 			{
-				printf_time();
+				printf_time_func(__func__);
 				perror("recv error");
 				continue;
 			}
 			memcpy(&message, recvbuf, sizeof(message));
-			printf_time();
+			printf_time_func(__func__);
 			printf_so(udp_client);
 			printf("\tcount: %d  client name: %s\n\t", message.count, message.client_name);
 		}
@@ -255,13 +254,9 @@ void printf_so(Client client)
 		   client.aliva_count);
 }
 
-void printf_time()
+void printf_time_func(const char *str)
 {
-	time_t t;
-	struct tm *timeinfo;
-	time(&t);
-	timeinfo = localtime(&t);
-	printf("[Time]%d:%d:%d: ", timeinfo->tm_hour, timeinfo->tm_min, timeinfo->tm_sec);
+	printf("[Time]%s. Fucntion%s: ", __TIME__, str);
 }
 
 void reset_client(Client *client)
