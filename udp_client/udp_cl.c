@@ -30,7 +30,7 @@ int main()
 	memset(&addr_serv, 0, sizeof(addr_serv));
 	addr_serv.sin_family = AF_INET;
 	addr_serv.sin_addr.s_addr = htonl(INADDR_ANY);
-	addr_serv.sin_port = htons(LISTEN_PORT);
+	addr_serv.sin_port = htons(SELECT_LISTEN_PORT);
 
 	process_client(udp_socket, addr_serv);
 	close(udp_socket);

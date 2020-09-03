@@ -1,7 +1,7 @@
 /*
  * @Author: your name
  * @Date: 2020-08-31 11:43:03
- * @LastEditTime: 2020-09-02 13:57:32
+ * @LastEditTime: 2020-09-03 10:09:37
  * @LastEditors: Please set LastEditors
  * @Description: In User Settings Edit
  * @FilePath: /select/tcp_client/tcp_cl.c
@@ -34,7 +34,7 @@ int main()
 	memset(&server_addr, 0, sizeof(server_addr));
 	server_addr.sin_family = AF_INET;
 	server_addr.sin_addr.s_addr = htonl(INADDR_ANY);
-	server_addr.sin_port = htons(LISTEN_PORT);
+	server_addr.sin_port = htons(SELECT_LISTEN_PORT);
 
 	//inet_pton(AF_INET, argv[1], &server_addr.sin_addr);
 
