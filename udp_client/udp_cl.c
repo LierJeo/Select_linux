@@ -1,7 +1,7 @@
 /*
  * @Author: your name
  * @Date: 2020-09-02 10:35:12
- * @LastEditTime: 2020-09-02 13:46:43
+ * @LastEditTime: 2020-09-04 17:06:29
  * @LastEditors: Please set LastEditors
  * @Description: In User Settings Edit
  * @FilePath: /select/udp_client/ucp_cl.c
@@ -14,11 +14,10 @@
 #include <unistd.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
-#include "../common/common.h"
+#include "common.h"
 #include <sys/uio.h>
 
 void process_client(int socket, struct sockaddr_in addr_serv);
-struct iovec v;
 
 int main()
 {
@@ -44,8 +43,7 @@ void process_client(int socket, struct sockaddr_in addr_serv)
 	struct Massage massage;
 	massage.count = 0;
 	memcpy(massage.client_name, name, sizeof(name));
-	v.iov_base = &massage;
-	v.iov_len = sizeof(massage);
+
 	while (1)
 	{
 		massage.count += 1;

@@ -25,7 +25,7 @@
  * 
  * @Author: your name
  * @Date: 2020-08-28 17:19:07
- * @LastEditTime: 2020-09-03 20:36:39
+ * @LastEditTime: 2020-09-04 19:26:17
  * @LastEditors: Please set LastEditors
  * @Description: In User Settings Edit
  * @FilePath: /select/server/server.c
@@ -41,10 +41,11 @@
 #include <arpa/inet.h>
 #include <stdlib.h>
 #include <string.h>
-#include "../common/common.h"
 #include <time.h>
 #include <fcntl.h>
 #include <sys/stat.h>
+#include "common.h"
+#include "log.h"
 
 #define SERVER_T2 10
 #define SERVER_MAX_CLIENT 2
@@ -72,6 +73,7 @@ int memcpy_st(void *det, size_t detSize, const void *src, size_t srcSize, char *
 
 int main()
 {
+	
 	int client_count = 0;
 	int tcp_listen_socket = 0;
 	int udp_listen_socket = 0;
@@ -80,7 +82,7 @@ int main()
 	{
 		reset_client(&client[i]);
 	}
-
+	
 	struct Massage message;
 	struct sockaddr_in serv_addr;
 
@@ -91,19 +93,19 @@ int main()
 	char recvbuf[SELECT_MAX_SIZE] = {0};
 	struct timeval tv = {0, 0};
 
+	char ipbuf[20] = {0};
+
 	//创建监听套接字
 	tcp_listen_socket = socket(AF_INET, SOCK_STREAM, 0);
 	udp_listen_socket = socket(AF_INET, SOCK_DGRAM, 0);
 
 	if (tcp_listen_socket == -1 || udp_listen_socket == -1)
 	{
-		printf_time_func(__func__);
-		perror("listen socket create error");
+		SELECT_LOGWRITE(LOG_ERROR,"%s","listen socket create error");
 		goto END;
 	}
 
 	memset((void *)&serv_addr, 0, sizeof(serv_addr));
-
 	serv_addr.sin_family = AF_INET;
 	serv_addr.sin_addr.s_addr = htonl(INADDR_ANY);
 	serv_addr.sin_port = htons(SELECT_LISTEN_PORT);
@@ -111,20 +113,17 @@ int main()
 	if ((-1 == bind(tcp_listen_socket, (struct sockaddr *)&serv_addr, sizeof(serv_addr))) ||
 		(-1 == bind(udp_listen_socket, (struct sockaddr *)&serv_addr, sizeof(serv_addr))))
 	{
-		printf_time_func(__func__);
-		perror("bind error");
+		SELECT_LOGWRITE(LOG_ERROR, "%s", "bind error");
+		goto END;
 	}
-
+	
 	listen(tcp_listen_socket, SELECT_MAX_LINE);
-	printf_time_func(__func__);
-	printf("start listen...  ");
-	char ipbuf[16] = {0};
-	printf("SERVER IP:%s   listen port:%d\n",
-		   inet_ntop(AF_INET, &serv_addr.sin_addr.s_addr, ipbuf, sizeof(ipbuf)),
-		   ntohs(serv_addr.sin_port));
-
+	SELECT_LOGWRITE(LOG_INFO, "start listen.SERVER IP:%s listen port:%d.",
+			 inet_ntop(AF_INET, &serv_addr.sin_addr.s_addr, ipbuf, sizeof(ipbuf)),
+			 ntohs(serv_addr.sin_port));
+	//SELECT_LOGWRITE(LOG_INFO, "start listen.SERVER IP:%s",
+	//				inet_ntop(AF_INET, &serv_addr.sin_addr.s_addr, ipbuf, sizeof(ipbuf)));
 	int maxfd = tcp_listen_socket > udp_listen_socket ? tcp_listen_socket : udp_listen_socket;
-
 	FD_ZERO(&ndfs);
 	FD_SET(tcp_listen_socket, &ndfs);
 	FD_SET(udp_listen_socket, &ndfs);
@@ -148,8 +147,6 @@ int main()
 		{
 			//一个t2周期
 			t2 = SERVER_T2;
-			printf_time_func(__func__);
-			printf("T2 printf:  ");
 			if (client_count > 0)
 			{
 
@@ -157,22 +154,26 @@ int main()
 				{
 					if (client[i].alive_count != 0)
 					{
+						char ipbuf[20];
+						SELECT_SOCK_INFO("T2 printf:",client[i].client_addr.sin_addr.s_addr,
+										 client[i].client_addr.sin_port,
+										 client[i].alive_count,
+										 ipbuf);
 						printf_so(client[i]);
 					}
 				}
 			}
 			else
 			{
-				printf("no client\n");
+				SELECT_LOGWRITE(LOG_INFO, "T2 printf:no client");
 			}
 		}
 
 		sl_ret = select(maxfd + 1, &tm, NULL, NULL, &tv);
 		if (sl_ret == -1)
 		{
-			printf_time_func(__func__);
-			perror("select error");
-			return -1;
+			SELECT_LOGWRITE(LOG_ERROR, "no client");
+			goto END;
 		}
 		if (FD_ISSET(tcp_listen_socket, &tm))
 		{
@@ -180,34 +181,19 @@ int main()
 			tcp_client.client_socket = accept(tcp_listen_socket, (struct sockaddr *)&tcp_client.client_addr, &clien_len);
 			if (tcp_client.client_socket == -1)
 			{
-				printf_time_func(__func__);
-				perror("accept error");
+				SELECT_LOGWRITE(LOG_ERROR,"accept error");
 				continue;
 			}
 			client_count += 1;
+			SELECT_LOGWRITE(LOG_DEBUG, "client count:%d", client_count);
 			tcp_client.sock_type = SOCK_STREAM;
-			printf_so(tcp_client);
+			printf_so(tcp_client); 
 			FD_SET(tcp_client.client_socket, &ndfs);
 			//重新设置最大描述符；
 			maxfd = maxfd < tcp_client.client_socket ? tcp_client.client_socket : maxfd;
 		}
 		if (FD_ISSET(udp_listen_socket, &tm))
 		{
-			// memset(recvbuf, 0, sizeof(recvbuf));
-			// struct sockaddr_in cl_addr;
-			// socklen_t clien_len = sizeof(cl_addr);
-			// int recv_len = recvfrom(udp_listen_socket, recvbuf, sizeof(recvbuf),
-			// 						0, (struct sockaddr *)&cl_addr, &clien_len);
-			// if (recv_len == -1)
-			// {
-			// 	printf_time_func(__func__);
-			// 	perror("recv error");
-			// 	continue;
-			// }
-			// memcpy(&message, recvbuf, sizeof(message));
-			// printf_time_func(__func__);
-			// printf_so(udp_client);
-			// printf("\tcount: %d  client name: %s\n\t", message.count, message.client_name);
 			if (udp_client.client_socket == -1)
 			{
 				udp_client.client_socket = udp_listen_socket;
@@ -227,15 +213,15 @@ int main()
 										0, (struct sockaddr *)&client[i].client_addr, &clien_len);
 				if (recv_len == -1)
 				{
-					printf_time_func(__func__);
-					perror("recv error");
+					SELECT_LOGWRITE(LOG_ERROR, "recv error");
 					continue;
 				}
 				else if (recv_len == 0)
 				{
-					printf_time_func(__func__);
-					printf("  client disconnect:  ");
-					printf_so(client[i]);
+					SELECT_SOCK_INFO("client disconnect: ", client[i].client_addr.sin_addr.s_addr,
+									 client[i].client_addr.sin_port,
+									 client[i].alive_count,
+									 ipbuf);
 					FD_CLR(client[i].client_socket, &ndfs);
 					close(client[i].client_socket);
 					reset_client(&client[i]);
@@ -245,9 +231,8 @@ int main()
 					client[i].alive_time = 0;
 					client[i].alive_count += 1;
 					memcpy(&message, recvbuf, sizeof(message));
-					printf_time_func(__func__);
-					printf_so(client[i]);
-					printf("\tcount:%d client name:%s\n", message.count, message.client_name);
+					SELECT_LOGWRITE(LOG_INFO, "count:%d client name:%s", message.count, message.client_name);
+					//printf("\tcount:%d client name:%s\n", message.count, message.client_name);
 				}
 			}
 			else
@@ -283,7 +268,7 @@ END:
 	}
 	for (int i = 0; i < SERVER_MAX_CLIENT; i++)
 	{
-		if (client[i].client_socket < 0)
+		if (client[i].client_socket > 0)
 		{
 			close(client[i].client_socket);
 		}
@@ -294,31 +279,11 @@ END:
 
 void printf_so(Client client)
 {
-#ifdef DEBUG
 	char ipbuf[16] = {0};
 	printf("client:  IP:%s  port:%d  alive count:%d\n",
 		   inet_ntop(AF_INET, &client.client_addr.sin_addr.s_addr, ipbuf, sizeof(ipbuf)),
 		   ntohs(client.client_addr.sin_port),
 		   client.alive_count);
-#else
-	char buf[1024] = {0};
-	char ipbuf[16] = {0};
-	char port[10] = {0};
-	char count[10] = {0};
-	int_to_string(port, ntohs(client.client_addr.sin_port));
-	int_to_string(count, client.alive_count);
-	strcat(buf, "client:  IP:");
-	strcat(buf, (char *)inet_ntop(AF_INET, &client.client_addr.sin_addr.s_addr, ipbuf, sizeof(ipbuf)));
-	strcat(buf, " port:");
-	strcat(buf, port);
-	strcat(buf, " alive count:");
-	strcat(buf, count);
-	strcat(buf, "\0");
-	struct iovec v;
-	v.iov_base = buf;
-	v.iov_len = sizeof(buf);
-	writev(STDOUT_FILENO, &v, 1);
-#endif // DEBUG
 }
 
 void printf_time_func(const char *str)
@@ -330,49 +295,6 @@ void reset_client(Client *client)
 {
 	memset(client, 0, sizeof(Client));
 	client->client_socket = -1;
-}
-
-void out_redirection()
-{
-	int fp = open("../log.txt", O_RDWR | O_APPEND | O_CREAT, 0666);
-	if (fp < 0)
-	{
-		printf_time_func(__func__);
-		perror("open error");
-		return;
-	}
-	if (dup2(fp, STDOUT_FILENO) == STDOUT_FILENO)
-	{
-		printf("attach\n");
-		return;
-	}
-	else
-	{
-		printf_time_func(__func__);
-		perror("dup2 error");
-		return;
-	}
-}
-
-void int_to_string(char *str, int intnum)
-{
-	long i, Div = 1000000000, j = 0, Status = 0;
-	//32位无符号数最大是10位整数,所以Div=10 0000 0000
-	for (i = 0; i < 10; i++)
-	{
-		str[j++] = (intnum / Div) + '0'; //取最高位 转化成字符
-
-		intnum = intnum % Div;					  //去掉最高位
-		Div /= 10;								  //还剩下10-i位要转换
-		if ((str[j - 1] == '0') && (Status == 0)) //忽略最高位的'0'
-		{
-			j = 0;
-		}
-		else
-		{
-			Status++;
-		}
-	}
 }
 
 int memcpy_st(void *det, size_t detSize, const void *src, size_t srcSize, char *cppName, uint32_t lineNumber)

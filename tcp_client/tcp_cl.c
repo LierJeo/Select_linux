@@ -1,7 +1,7 @@
 /*
  * @Author: your name
  * @Date: 2020-08-31 11:43:03
- * @LastEditTime: 2020-09-03 10:09:37
+ * @LastEditTime: 2020-09-04 17:08:55
  * @LastEditors: Please set LastEditors
  * @Description: In User Settings Edit
  * @FilePath: /select/tcp_client/tcp_cl.c
@@ -14,12 +14,11 @@
 #include <unistd.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
-#include "../common/common.h"
+#include "common.h"
 #include <sys/uio.h>
 //#define PORT 9527
 
 void process_client(int socket);
-struct iovec v;
 
 int main()
 {
@@ -29,7 +28,7 @@ int main()
 	if (tcp_socket < 0)
 	{
 		printf("socket error: %d\n", errno);
-		return -1;
+		goto END;
 	}
 	memset(&server_addr, 0, sizeof(server_addr));
 	server_addr.sin_family = AF_INET;
@@ -42,9 +41,15 @@ int main()
 	{
 		//printf("connect error:%d\n", errno);
 		perror("connect error");
-		return -1;
+		goto END;
+
 	}
 	process_client(tcp_socket);
+END:
+	if (tcp_socket < 0)
+	{
+		close(tcp_socket);
+	}
 	return 0;
 }
 
@@ -54,12 +59,10 @@ void process_client(int socket)
 	struct Massage message;
 	message.count = 0;
 	memcpy(message.client_name, name, sizeof(message.client_name) > sizeof(name) ? sizeof(name) : sizeof(message.client_name));
-	v.iov_base = &message;
-	v.iov_len = sizeof(message);
 	while (1)
 	{
 		message.count += 1;
-		writev(socket, &v, 1);
+		send(socket, &message, sizeof(message), 0);
 		printf("send message:\n %d  %s\n", message.count, message.client_name);
 		//size = read(socket, buffer, sizeof(buffer));
 		sleep(3);
