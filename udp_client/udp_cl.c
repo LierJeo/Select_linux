@@ -1,7 +1,7 @@
 /*
  * @Author: your name
  * @Date: 2020-09-02 10:35:12
- * @LastEditTime: 2020-09-04 17:06:29
+ * @LastEditTime: 2020-09-06 01:43:45
  * @LastEditors: Please set LastEditors
  * @Description: In User Settings Edit
  * @FilePath: /select/udp_client/ucp_cl.c
@@ -39,7 +39,7 @@ int main()
 
 void process_client(int socket, struct sockaddr_in addr_serv)
 {
-	char name[] = "ucp client";
+	char name[] = "udp client";
 	struct Massage massage;
 	massage.count = 0;
 	memcpy(massage.client_name, name, sizeof(name));

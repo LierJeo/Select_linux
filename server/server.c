@@ -25,7 +25,7 @@
  * 
  * @Author: your name
  * @Date: 2020-08-28 17:19:07
- * @LastEditTime: 2020-09-04 19:26:17
+ * @LastEditTime: 2020-09-06 01:59:04
  * @LastEditors: Please set LastEditors
  * @Description: In User Settings Edit
  * @FilePath: /select/server/server.c
@@ -50,6 +50,7 @@
 #define SERVER_T2 10
 #define SERVER_MAX_CLIENT 2
 
+
 //#define udp_listen_socket 	client[1].client_socket
 #define udp_client client[1]
 #define tcp_client client[0]
@@ -64,16 +65,12 @@ typedef struct CLIENT
 	struct sockaddr_in client_addr;
 } Client;
 
-void printf_so(Client client);
 void reset_client(Client *client);
-void printf_time_func(const char *str);
-void out_redirection();
-void int_to_string(char *str, int intnum);
+char *socktypetostr(int type);
 int memcpy_st(void *det, size_t detSize, const void *src, size_t srcSize, char *cppName, uint32_t lineNumber);
 
 int main()
 {
-	
 	int client_count = 0;
 	int tcp_listen_socket = 0;
 	int udp_listen_socket = 0;
@@ -92,7 +89,7 @@ int main()
 
 	char recvbuf[SELECT_MAX_SIZE] = {0};
 	struct timeval tv = {0, 0};
-
+	time_t left_time = 0;
 	char ipbuf[20] = {0};
 
 	//创建监听套接字
@@ -121,8 +118,6 @@ int main()
 	SELECT_LOGWRITE(LOG_INFO, "start listen.SERVER IP:%s listen port:%d.",
 			 inet_ntop(AF_INET, &serv_addr.sin_addr.s_addr, ipbuf, sizeof(ipbuf)),
 			 ntohs(serv_addr.sin_port));
-	//SELECT_LOGWRITE(LOG_INFO, "start listen.SERVER IP:%s",
-	//				inet_ntop(AF_INET, &serv_addr.sin_addr.s_addr, ipbuf, sizeof(ipbuf)));
 	int maxfd = tcp_listen_socket > udp_listen_socket ? tcp_listen_socket : udp_listen_socket;
 	FD_ZERO(&ndfs);
 	FD_SET(tcp_listen_socket, &ndfs);
@@ -130,15 +125,52 @@ int main()
 
 	while (1)
 	{
-		tm = ndfs;
-		time_t left_time = tv.tv_sec;
+		tm = ndfs;	
 		//计时归零时重置
-		if (tv.tv_sec == 0)
+		if (tv.tv_sec <= 0)
 		{
 			tv.tv_sec = SELECT_ALIVE_TIME;
 		}
+		left_time = tv.tv_sec;
+		// //计算周期t2剩余时间
+		// t2 -= (left_time - tv.tv_sec);
+		// if (0 < t2 && t2 <= 3)
+		// {
+		// 	tv.tv_sec = t2;
+		// }
+		// else if (t2 <= 0)
+		// {
+		// 	//一个t2周期
+		// 	t2 = SERVER_T2;
+		// 	SELECT_LOGWRITE(LOG_DEBUG, "T2: client count:%d", client_count);
+		// 	if (client_count > 0)
+		// 	{
+		// 		for (int i = 0; i < SERVER_MAX_CLIENT; i++)
+		// 		{
+		// 			if (client[i].alive_count != 0)
+		// 			{
+		// 				char ipbuf[20];
+		// 				SELECT_SOCK_INFO("T2 printf:",client[i].client_addr.sin_addr.s_addr,
+		// 								 client[i].client_addr.sin_port,
+		// 								 client[i].alive_count,
+		// 								 ipbuf);
+		// 			}
+		// 		}
+		// 	}
+		// 	else
+		// 	{
+		// 		SELECT_LOGWRITE(LOG_INFO, "T2 printf:no client");
+		// 	}
+		// }
+
+		sl_ret = select(maxfd + 1, &tm, NULL, NULL, &tv);
+		if (sl_ret == -1)
+		{
+			SELECT_LOGWRITE(LOG_ERROR, "no client");
+			goto END;
+		}
 		//计算周期t2剩余时间
-		t2 -= (SELECT_ALIVE_TIME - left_time);
+		t2 -= (left_time - tv.tv_sec);
 		if (0 < t2 && t2 <= 3)
 		{
 			tv.tv_sec = t2;
@@ -147,19 +179,20 @@ int main()
 		{
 			//一个t2周期
 			t2 = SERVER_T2;
+			SELECT_LOGWRITE(LOG_DEBUG, "T2: client count:%d", client_count);
 			if (client_count > 0)
 			{
 
 				for (int i = 0; i < SERVER_MAX_CLIENT; i++)
 				{
-					if (client[i].alive_count != 0)
+					if (client[i].alive_count > 0)
 					{
 						char ipbuf[20];
-						SELECT_SOCK_INFO("T2 printf:",client[i].client_addr.sin_addr.s_addr,
+						SELECT_SOCK_INFO("T2 printf:", client[i].client_addr.sin_addr.s_addr,
 										 client[i].client_addr.sin_port,
 										 client[i].alive_count,
+										 socktypetostr(client[i].sock_type),
 										 ipbuf);
-						printf_so(client[i]);
 					}
 				}
 			}
@@ -167,13 +200,6 @@ int main()
 			{
 				SELECT_LOGWRITE(LOG_INFO, "T2 printf:no client");
 			}
-		}
-
-		sl_ret = select(maxfd + 1, &tm, NULL, NULL, &tv);
-		if (sl_ret == -1)
-		{
-			SELECT_LOGWRITE(LOG_ERROR, "no client");
-			goto END;
 		}
 		if (FD_ISSET(tcp_listen_socket, &tm))
 		{
@@ -185,9 +211,8 @@ int main()
 				continue;
 			}
 			client_count += 1;
-			SELECT_LOGWRITE(LOG_DEBUG, "client count:%d", client_count);
+			SELECT_LOGWRITE(LOG_DEBUG, "accept tcpclient: socket type:%s. alive time:%d", socktypetostr(tcp_client.sock_type),tcp_client.alive_time);
 			tcp_client.sock_type = SOCK_STREAM;
-			printf_so(tcp_client); 
 			FD_SET(tcp_client.client_socket, &ndfs);
 			//重新设置最大描述符；
 			maxfd = maxfd < tcp_client.client_socket ? tcp_client.client_socket : maxfd;
@@ -197,6 +222,8 @@ int main()
 			if (udp_client.client_socket == -1)
 			{
 				udp_client.client_socket = udp_listen_socket;
+				udp_client.sock_type = SOCK_DGRAM;
+				SELECT_LOGWRITE(LOG_DEBUG, "accept udpclient: client count:%d", client_count);
 				client_count += 1;
 			}
 		}
@@ -204,8 +231,6 @@ int main()
 		{
 			if (FD_ISSET(client[i].client_socket, &tm))
 			{
-				// memset(recvbuf, 0, sizeof(recvbuf));
-				// int recv_len = (int)read(client[i].client_socket, recvbuf, sizeof(recvbuf));
 				memset(recvbuf, 0, sizeof(recvbuf));
 				struct sockaddr_in cl_addr;
 				socklen_t clien_len = sizeof(cl_addr);
@@ -221,41 +246,52 @@ int main()
 					SELECT_SOCK_INFO("client disconnect: ", client[i].client_addr.sin_addr.s_addr,
 									 client[i].client_addr.sin_port,
 									 client[i].alive_count,
+									 socktypetostr(client[i].sock_type),
 									 ipbuf);
 					FD_CLR(client[i].client_socket, &ndfs);
 					close(client[i].client_socket);
 					reset_client(&client[i]);
+					client_count -= 1;
 				}
 				else
 				{
 					client[i].alive_time = 0;
 					client[i].alive_count += 1;
 					memcpy(&message, recvbuf, sizeof(message));
-					SELECT_LOGWRITE(LOG_INFO, "count:%d client name:%s", message.count, message.client_name);
-					//printf("\tcount:%d client name:%s\n", message.count, message.client_name);
+					SELECT_LOGWRITE(LOG_INFO, "message count:%d. client name:%s", message.count, message.client_name);
 				}
 			}
 			else
 			{
-				client[i].alive_time += SELECT_ALIVE_TIME - left_time;
-				if (client[i].alive_time >= 3 * SELECT_ALIVE_TIME)
+				if (client[i].client_socket != -1)
 				{
-					if (i == 0) //client[0] 是 tcp_client
+					client[i].alive_time += left_time - tv.tv_sec;
+					SELECT_LOGWRITE(LOG_DEBUG, "socket type:%s. alive_time:%d", socktypetostr(client[i].sock_type),client[i].alive_time);
+					if (client[i].alive_time >= 3 * SELECT_ALIVE_TIME)
 					{
-						close(client[i].client_socket);
-						FD_CLR(client[i].client_socket, &ndfs);
-						reset_client(&client[i]);
+						SELECT_SOCK_INFO("out of time: ", client[i].client_addr.sin_addr.s_addr,
+										 client[i].client_addr.sin_port,
+										 client[i].alive_count,
+										 socktypetostr(client[i].sock_type),
+										 ipbuf);
+						if (client[i].sock_type == SOCK_STREAM)
+						{
+							close(client[i].client_socket);
+							FD_CLR(client[i].client_socket, &ndfs);
+							reset_client(&client[i]);
+							client_count -= 1;
+						}
+						else
+						{
+							//FD_CLR(client[i].client_socket, &ndfs);
+							reset_client(&client[i]);
+							client_count -= 1;
+						}
 					}
-					else
-					{
-						//FD_CLR(client[i].client_socket, &ndfs);
-						reset_client(&client[i]);
-						client_count -= 1;
-					}
-				}
-			}
-		}
-	}
+				}//if (client[i].client_socket != -1)
+			}//if (FD_ISSET(client[i].client_socket, &tm))
+		}//for (int i = 0; i < SERVER_MAX_CLIENT; i++)
+	}//while (1)
 
 END:
 	if (tcp_listen_socket < 0)
@@ -277,24 +313,27 @@ END:
 	return 0;
 }
 
-void printf_so(Client client)
-{
-	char ipbuf[16] = {0};
-	printf("client:  IP:%s  port:%d  alive count:%d\n",
-		   inet_ntop(AF_INET, &client.client_addr.sin_addr.s_addr, ipbuf, sizeof(ipbuf)),
-		   ntohs(client.client_addr.sin_port),
-		   client.alive_count);
-}
-
-void printf_time_func(const char *str)
-{
-	printf("[Time]%s. Fucntion%s: ", __TIME__, str);
-}
 
 void reset_client(Client *client)
 {
 	memset(client, 0, sizeof(Client));
 	client->client_socket = -1;
+}
+
+char *socktypetostr(int type)
+{
+	if(type == SOCK_STREAM)
+	{
+		return "SOCK_STREAM";
+	}
+	else if (type == SOCK_DGRAM)
+	{
+		return "SOCK_DGRAM";
+	}
+	else
+	{
+		return "OTHERS";
+	}
 }
 
 int memcpy_st(void *det, size_t detSize, const void *src, size_t srcSize, char *cppName, uint32_t lineNumber)
